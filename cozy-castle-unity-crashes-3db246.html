@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en"><head><meta name="robots" content="noindex,nofollow"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cozy Castle: Unity Cloud crash report, Nov 10 to 17, 2026</title>
+<style>
+body{font:15px/1.45 system-ui,Segoe UI,Arial,sans-serif;margin:0;padding:16px;background:#faf8f6;color:#222;max-width:1150px}
+h1{font-size:21px;margin:0 0 4px}h2{font-size:17px;margin:24px 0 8px}
+.sub{color:#666;font-size:13px;margin-bottom:14px}
+.box{background:#fff;border:1px solid #e3ddd8;border-radius:8px;padding:12px 14px;margin:10px 0}
+.tiles{display:flex;flex-wrap:wrap;gap:8px}
+.tile{background:#fff;border:1px solid #e3ddd8;border-radius:8px;padding:8px 12px;min-width:120px}
+.tile b{display:block;font-size:20px}.tile span{font-size:12px;color:#666}
+.up{color:#b3261e}.ok{color:#1e7b34}
+code{background:#f1ece7;padding:0 4px;border-radius:4px;font-size:13px}
+.tag{display:inline-block;font-size:12px;padding:0 6px;border-radius:9px;background:#eee}
+.fixed{background:#dcefe0;color:#1e5b2c}.mem{background:#fbe9d0;color:#7a4a00}.int{background:#e6e6f5;color:#333a7a}.old{background:#eee;color:#555}
+table{border-collapse:collapse;table-layout:fixed;width:100%;background:#fff;font-size:13px}
+th,td{border-bottom:1px solid #eee;padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+th{position:relative;background:#f4efea;cursor:pointer;user-select:none}
+th .rz{position:absolute;right:0;top:0;width:6px;height:100%;cursor:col-resize}
+th.asc::after{content:" \25B2";font-size:10px}th.desc::after{content:" \25BC";font-size:10px}
+td.n{text-align:right}
+ul{margin:6px 0;padding-left:20px}li{margin:3px 0}
+</style></head><body>
+<h1>Cozy Castle: what Unity Cloud caught last week</h1>
+<div class="sub">Unity Cloud Diagnostics, project Cozy Castle, last 7 days (Nov 10 to 17, 2026). Read live from the dashboard on Nov 17, 2026. Code checked against <code>origin/main</code> the same day.</div>
+
+<div class="tiles">
+<div class="tile"><b>36</b><span>issue occurrences <span class="up">+86%</span></span></div>
+<div class="tile"><b>19</b><span>exceptions <span class="up">+91%</span></span></div>
+<div class="tile"><b>16</b><span>native crashes (5.9% of users)</span></div>
+<div class="tile"><b>1</b><span>ANR (0.5% of users)</span></div>
+<div class="tile"><b>1.7%</b><span>crash rate <span class="up">+33%</span></span></div>
+<div class="tile"><b>920</b><span>crash-free sessions <span class="ok">+14%</span></span></div>
+</div>
+
+<div class="box">
+<b>The short version.</b>
+<ul>
+<li>The two biggest bugs, 17 of the 19 exceptions, are already fixed on main (commit <code>c4089b155</code>, Nov 16). Players still hit them because store builds 0.9.0 and 0.9.1 predate the fix. The next store build should clear them.</li>
+<li>Almost every native crash looks like the OS killing the game for using too much memory. Each crash we could open shows "Low Memory" warnings first. We can't see where the memory goes because the crash symbols were never uploaded.</li>
+<li>Around a third of the noise comes from our own test builds (Cozy Moto, Cozy Perf Scenario, an emulator), not from players.</li>
+</ul>
+</div>
+
+<h2>What went wrong, grouped by cause</h2>
+
+<div class="box"><b>1. Plants changed the list while it was being read</b> <span class="tag fixed">fixed on main</span><br>
+8 occurrences, 3 players, Google Play build 0.9.1 (Pixel 9 Pro XL). "Collection was modified" in <code>PlantTicker.Update</code>. A plant growing could switch another plant on or off, and that edited the list the ticker was walking. The game threw every half second while it happened.<br>
+Fix: <code>c4089b155</code> walks a copy of the list and skips plants removed during the tick (<code>Assets/Scripts/Shop/Farming/PlantTicker.cs</code>).</div>
+
+<div class="box"><b>2. Changing graphics quality touched trees and junk that were already gone</b> <span class="tag fixed">fixed on main</span><br>
+9 occurrences in 3 issues, up to 6 players. Google Play build 0.9.0 (Galaxy A56, Galaxy S20 FE) plus our Perf Scenario build. When the player applied a quality level, <code>QualityBasedRenderer</code> and <code>QualityBasedBehaviour</code> on Flowers, Trees and Junk_TallGrass still pointed at renderers inside junk that had been swept or tree towers that had been sold. That threw, and the "applying quality" overlay stayed on screen.<br>
+Fix: <code>c4089b155</code> gives each piece its own quality components, so nothing points into an object that can be destroyed.<br>
+Risk left: the fix is in the prefabs, not the code. A new prefab wired the same way would bring it back. An edit-mode test that checks every quality component only points inside its own object would catch that (proposed, not built).</div>
+
+<div class="box"><b>3. The OS killed the game for using too much memory</b> <span class="tag mem">likely</span><br>
+16 native crashes: 7 on Android (inside libc), 9 on iOS (inside UnityFramework or the kernel). Each one we opened showed "Low Memory" warnings just before the crash.
+<ul>
+<li>Android: the ones we opened are from our own "Cozy Moto" test build 0.9.2 on a Moto G Play 2023 (3 GB, PowerVR GE8320). They all land in the same Nov 16 to 17 overnight window, so they look like one test run on that phone.</li>
+<li>iOS: one was an App Store 0.8.6 player on an iPhone 13 (iOS 27.2), killed in the render loop after two Low Memory warnings. The other eight have the same one-line shape but are unreadable without symbols.</li>
+<li>Earlier reports point the same way: Pixel 6 Low Memory on Oct 8 and Oct 26.</li>
+</ul></div>
+
+<div class="box"><b>4. Smaller ones</b>
+<ul>
+<li><span class="tag old">old build</span> URP decal pass crash (<code>RenderingUtils.SetScaleBiasRt</code>), 2 occurrences, App Store 0.7.6 on an iPhone 12. Old version, nothing to do unless it shows up on 0.9.x.</li>
+<li><span class="tag int">internal</span> 1 ANR on an Android emulator: the game used 1.4 GB and didn't answer a pause in time. Not a player device.</li>
+</ul></div>
+
+<h2>Every issue in the window</h2>
+<table id="issues" data-key="cc-diag-2026-11-17">
+<colgroup><col style="width:90px"><col style="width:300px"><col style="width:70px"><col style="width:60px"><col style="width:60px"><col style="width:120px"><col style="width:200px"><col style="width:180px"></colgroup>
+<thead><tr><th>ID</th><th>Problem</th><th>Platform</th><th>Count</th><th>Players</th><th>Last seen (UTC)</th><th>Build / device seen</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>e00e5f2c</td><td>Collection modified in PlantTicker.Update</td><td>Android</td><td class="n">8</td><td class="n">3</td><td>2026-11-13 03:27</td><td>Store 0.9.1, Pixel 9 Pro XL</td><td>Fixed on main, c4089b155</td></tr>
+<tr><td>889a9430</td><td>Null renderer in QualityBasedRenderer (quality apply)</td><td>Android</td><td class="n">5</td><td class="n">3</td><td>2026-11-17 00:57</td><td>Store 0.9.0, Galaxy A56</td><td>Fixed on main, c4089b155</td></tr>
+<tr><td>9bf68227</td><td>Null renderer in QualityBasedRenderer (perf lever)</td><td>Android</td><td class="n">3</td><td class="n">2</td><td>2026-11-16 19:28</td><td>Perf Scenario 0.9.2 (internal)</td><td>Fixed on main, c4089b155</td></tr>
+<tr><td>9e7a6b56</td><td>URP decal pass null reference</td><td>iOS</td><td class="n">2</td><td class="n">1</td><td>2026-11-11 13:19</td><td>App Store 0.7.6, iPhone 12</td><td>Old build</td></tr>
+<tr><td>4cac274e</td><td>Native crash in libc (Low Memory first)</td><td>Android</td><td class="n">2</td><td class="n">2</td><td>2026-11-17 00:03</td><td>Cozy Moto 0.9.2 (internal)</td><td>Memory</td></tr>
+<tr><td>dbe28298</td><td>Native crash in libc</td><td>Android</td><td class="n">1</td><td class="n">1</td><td>2026-11-16 00:31</td><td>Moto G Play 2023 (internal)</td><td>Memory</td></tr>
+<tr><td>a41ebf47</td><td>Native crash in libc</td><td>Android</td><td class="n">1</td><td class="n">1</td><td>2026-11-17 00:00</td><td>Not opened</td><td>Memory, likely</td></tr>
+<tr><td>9b855c2b</td><td>Native crash in libc</td><td>Android</td><td class="n">1</td><td class="n">1</td><td>2026-11-16 00:57</td><td>Not opened</td><td>Memory, likely</td></tr>
+<tr><td>57a46f29</td><td>Native crash in libc</td><td>Android</td><td class="n">1</td><td class="n">1</td><td>2026-11-16 00:45</td><td>Not opened</td><td>Memory, likely</td></tr>
+<tr><td>480d5106</td><td>Native crash in libc</td><td>Android</td><td class="n">1</td><td class="n">1</td><td>2026-11-16 01:10</td><td>Not opened</td><td>Memory, likely</td></tr>
+<tr><td>dbc93255</td><td>Native crash in UnityFramework render loop (Low Memory first)</td><td>iOS</td><td class="n">1</td><td class="n">1</td><td>2026-11-12 16:17</td><td>App Store 0.8.6, iPhone 13</td><td>Memory</td></tr>
+<tr><td>cff9dabb</td><td>Native crash in UnityFramework</td><td>iOS</td><td class="n">1</td><td class="n">1</td><td>2026-11-13 09:35</td><td>Not opened</td><td>Needs symbols</td></tr>
+<tr><td>c2994f05</td><td>Native crash in UnityFramework</td><td>iOS</td><td class="n">1</td><td class="n">1</td><td>2026-11-10 18:52</td><td>Not opened</td><td>Needs symbols</td></tr>
+<tr><td>ba2815dc</td><td>Native crash in UnityFramework</td><td>iOS</td><td class="n">1</td><td class="n">1</td><td>2026-11-11 13:26</td><td>Not opened</td><td>Needs symbols</td></tr>
+<tr><td>aa893289</td><td>Native crash in UnityFramework</td><td>iOS</td><td class="n">1</td><td class="n">1</td><td>2026-11-10 14:16</td><td>Not opened</td><td>Needs symbols</td></tr>
+<tr><td>a9ac1744</td><td>Native crash in UnityFramework</td><td>iOS</td><td class="n">1</td><td class="n">1</td><td>2026-11-14 17:17</td><td>Not opened</td><td>Needs symbols</td></tr>
+<tr><td>7e53b2c3</td><td>Native crash in UnityFramework</td><td>iOS</td><td class="n">1</td><td class="n">1</td><td>2026-11-10 11:41</td><td>Not opened</td><td>Needs symbols</td></tr>
+<tr><td>5a1b6d45</td><td>Native crash in UnityFramework</td><td>iOS</td><td class="n">1</td><td class="n">1</td><td>2026-11-11 16:37</td><td>Not opened</td><td>Needs symbols</td></tr>
+<tr><td>41dfcbb6</td><td>Native crash in libsystem_kernel</td><td>iOS</td><td class="n">1</td><td class="n">1</td><td>2026-11-10 14:00</td><td>Not opened</td><td>Needs symbols</td></tr>
+<tr><td>6ca80bf4</td><td>Null behaviour in QualityBasedBehaviour (quality apply)</td><td>Android</td><td class="n">1</td><td class="n">1</td><td>2026-11-12 17:52</td><td>Store 0.9.0, Galaxy S20 FE</td><td>Fixed on main, c4089b155</td></tr>
+<tr><td>4022b914</td><td>ANR: no answer to pause within 5 s</td><td>Android</td><td class="n">1</td><td class="n">1</td><td>2026-11-12 00:12</td><td>Emulator (internal)</td><td>Internal</td></tr>
+</tbody></table>
+
+<h2>What to do next</h2>
+<div class="box"><ul>
+<li>Ship a store build from current main (0.9.5 or later). That carries <code>c4089b155</code> and should end 17 of the 19 exceptions. Then check that issues e00e5f2c, 889a9430 and 6ca80bf4 stop.</li>
+<li>Upload crash symbols with every store build: iOS dSYMs, and Android <code>libunity</code> and <code>libil2cpp</code> symbols. Right now 15 of the 16 native crashes can't be read past "libc" or "UnityFramework".</li>
+<li>Profile memory on a 3 to 4 GB phone (Moto G Play 2023, iPhone 13). Low Memory warnings come before every native crash we opened.</li>
+<li>Keep test builds out of the player numbers. Cozy Moto, Cozy Perf Scenario and emulator runs share this project. Filter by bundle id (<code>com.cozycastle.cozycastle</code> for players), or point test builds at their own Unity project or environment.</li>
+<li>Guard the quality fix: add an edit-mode test that fails when a quality component points outside its own object (proposed).</li>
+</ul></div>
+
+<div class="sub">Source: Unity Cloud &gt; Cozy Castle &gt; Diagnostics &gt; Issues, date range "Last 7 days", read Nov 17, 2026. Players means impacted users as Unity counts them. "Not opened" rows were classified from the issue list only. The Performance tab didn't load and isn't included.</div>
+
+<script>
+(function(){
+  var t=document.getElementById('issues'),key=t.dataset.key,cols=t.querySelectorAll('col'),ths=t.tHead.rows[0].cells,body=t.tBodies[0];
+  var st={};try{st=JSON.parse(localStorage.getItem(key))||{};}catch(e){}
+  function save(){try{localStorage.setItem(key,JSON.stringify(st));}catch(e){}}
+  if(st.w){st.w.forEach(function(w,i){if(cols[i]&&w)cols[i].style.width=w;});}
+  function sort(i,dir){
+    var rows=[].slice.call(body.rows);
+    rows.sort(function(a,b){var x=a.cells[i].textContent,y=b.cells[i].textContent,nx=parseFloat(x),ny=parseFloat(y);
+      var c=(!isNaN(nx)&&!isNaN(ny)&&/^[\d.]+$/.test(x)&&/^[\d.]+$/.test(y))?nx-ny:x.localeCompare(y);return dir==='asc'?c:-c;});
+    rows.forEach(function(r){body.appendChild(r);});
+    [].forEach.call(ths,function(h){h.classList.remove('asc','desc');});ths[i].classList.add(dir);
+  }
+  [].forEach.call(ths,function(th,i){
+    var rz=document.createElement('span');rz.className='rz';th.appendChild(rz);
+    rz.addEventListener('click',function(e){e.stopPropagation();});
+    rz.addEventListener('mousedown',function(e){
+      e.preventDefault();e.stopPropagation();var x0=e.pageX,w0=th.offsetWidth;
+      function mv(ev){cols[i].style.width=Math.max(40,w0+ev.pageX-x0)+'px';}
+      function up(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);
+        st.w=[].map.call(cols,function(c){return c.style.width;});save();}
+      document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
+    });
+    th.addEventListener('click',function(){var d=th.classList.contains('desc')?'asc':'desc';sort(i,d);st.s=[i,d];save();});
+  });
+  if(st.s)sort(st.s[0],st.s[1]);
+})();
+</script>
+</body></html>
